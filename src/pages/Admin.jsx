@@ -7,6 +7,7 @@ import GuestsPanel from '../components/admin/GuestsPanel'
 import ImportExportPanel from '../components/admin/ImportExportPanel'
 import ReportsPanel from '../components/admin/ReportsPanel'
 import StaffPanel from '../components/admin/StaffPanel'
+import InvitationQrPanel from '../components/admin/InvitationQrPanel'
 
 const PANELS = [
   ['overview', 'Overview'],
@@ -14,6 +15,7 @@ const PANELS = [
   ['import-export', 'Import / Export'],
   ['staff', 'Staff'],
   ['reports', 'Reports'],
+  ['invitation-qr', 'Invitation QR'],
 ]
 
 export default function Admin() {
@@ -25,6 +27,7 @@ export default function Admin() {
     'import-export': <ImportExportPanel />,
     staff: <StaffPanel />,
     reports: <ReportsPanel />,
+    'invitation-qr': <InvitationQrPanel />,
   }[panel]
 
   return (
