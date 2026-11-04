@@ -2,23 +2,24 @@
 
 Private, mobile-first wedding check-in app. React + Vite, Tailwind, Supabase, Vercel.
 
-**Build status:** Stage 1 (foundation) done. Stage 2 core check-in, Stage 3 administration, Stage 4 polish/deploy still to come.
+**Build status:** Stage 1, Stage 2 core check-in, and Stage 3 administration are implemented. Stage 4 polish remains.
 
 ## Project structure
 
 ```
-supabase/migrations/   0001 schema · 0002 RLS · 0003 check-in + stats functions
+supabase/migrations/   0001 schema · 0002 RLS · 0003 check-in + stats · 0004 Stage 2 · 0005 Stage 3 administration
+supabase/functions/   invite-staff Edge Function (service-role key stays server-side)
 src/lib/supabase.js    Supabase client (anon key only)
 src/auth/              AuthContext (session + staff profile), ProtectedRoute
-src/pages/             Login, CheckIn (usher), Admin
-src/components/        Brand, Splash
+src/pages/             Login, CheckIn (usher), Admin dashboard
+src/components/admin/  Guest management, CSV, staff, dashboard and reports
 ```
 
 ## Setup
 
 1. **Create a Supabase project** at supabase.com.
 2. **Disable public sign-ups:** Authentication → Sign In / Providers → turn **off** "Allow new users to sign up". (Also leave email confirmation as you prefer; staff are created by the admin.)
-3. **Run migrations:** SQL Editor → run `0001_schema.sql`, `0002_rls.sql`, `0003_checkin_functions.sql` in order.
+3. **Run migrations:** SQL Editor → run `0001_schema.sql`, `0002_rls.sql`, `0003_checkin_functions.sql`, `0004_stage_2_search_and_checkin.sql`, and `0005_stage_3_admin.sql` in order. If migrations 0001–0004 have already been applied, run only `0005_stage_3_admin.sql`.
 4. **Create the first administrator:**
    - Authentication → Users → *Add user* (email + password, tick auto-confirm).
    - Copy the new user's UUID, then in the SQL Editor run:
@@ -29,8 +30,14 @@ src/components/        Brand, Splash
    A signed-in user with no active profile row is refused by the app and by RLS.
 5. **Environment:** `cp .env.example .env.local` and fill in the Project URL and anon key (Settings → API). Never use the `service_role` key in the frontend.
 6. `npm install && npm run dev`
+7. Deploy the staff invitation function after applying the migrations: `supabase functions deploy invite-staff`. Supabase supplies `SUPABASE_URL`, `SUPABASE_ANON_KEY`, and `SUPABASE_SERVICE_ROLE_KEY` to Edge Functions. Set `APP_BASE_URL` to the deployed app origin (for example `supabase secrets set APP_BASE_URL=https://your-production-domain`) and add that origin's `/login` URL to Supabase Auth's allowed redirect URLs.
+8. Run the local business-rule tests with `npm test`; run a production build with `npm run build`.
 
-Usher accounts will be created from the admin dashboard in Stage 3 (via a Supabase Edge Function that holds the service-role key server-side).
+The shared invitation QR should point to the deployed app's `/check-in` route. Unauthenticated staff are redirected through `/login` and returned to check-in; the QR itself grants no access. Stage 2 and Stage 3 database features require migrations `0004` and `0005` to be applied in Supabase; the browser uses only the public anon key and authenticated RPCs.
+
+The admin dashboard includes paginated guest management, bounded CSV import/export, staff listing/invitation/role control, and attendance/history reports. Import is capped at 500 rows per transaction; exports are capped at 5,000 rows. Staff invitation requires the deployed `invite-staff` Edge Function. The function validates the current active admin from their authenticated session before using its server-only service role.
+
+The Node tests cover CSV parsing/validation, safe exports, pagination, attendance calculations, and Stage 2 check-in rules. Database authorization, staff invitations, RLS, atomic import behavior, and concurrent check-ins should also be verified against the Supabase project before event use.
 
 ## Security model (summary)
 
@@ -47,7 +54,7 @@ Usher accounts will be created from the admin dashboard in Stage 3 (via a Supaba
 | Every check-in records the usher | `usher_id = auth.uid()` set inside the function |
 | Disabled staff are locked out | `is_active` checked in every policy and in the app |
 
-The QR code only opens the login page; it grants nothing.
+The shared QR opens `/check-in`; unauthenticated staff are routed to login, and the QR itself grants nothing.
 
 ## Additions to the brief's schema (flagged, not silent)
 

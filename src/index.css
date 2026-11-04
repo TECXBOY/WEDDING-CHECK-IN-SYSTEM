@@ -24,9 +24,9 @@
     @apply w-full rounded-lg border border-white/15 bg-deepnavy px-4 py-3.5 text-white placeholder-white/40 outline-none focus:border-gold;
   }
   .btn-primary {
-    @apply w-full rounded-lg bg-gold px-5 py-4 text-base font-semibold text-midnight active:opacity-90 disabled:cursor-not-allowed disabled:opacity-50;
+    @apply w-full rounded-lg bg-gold px-5 py-4 text-base font-semibold text-midnight active:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold disabled:cursor-not-allowed disabled:opacity-50;
   }
   .btn-ghost {
-    @apply rounded-lg border border-white/20 px-4 py-3 text-sm text-white/80 active:bg-white/5;
+    @apply rounded-lg border border-white/20 px-4 py-3 text-sm text-white/80 active:bg-white/5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold disabled:cursor-not-allowed disabled:opacity-50;
   }
 }
