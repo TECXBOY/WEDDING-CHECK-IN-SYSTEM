@@ -1,16 +1,16 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
-import { INVITATION_QR_FILES, STAFF_CHECK_IN_URL } from '../src/config/invitation.js'
+import { INVITATION_QR_FILES, REGISTRATION_URL } from '../src/config/invitation.js'
 
-test('shared invitation QR is pinned to the production staff check-in route', () => {
+test('shared invitation QR is pinned to the production household registration route', () => {
   assert.equal(
-    STAFF_CHECK_IN_URL,
-    'https://ing-fatmata-kargbo-ing-alhaji-s-koi.vercel.app/check-in',
+    REGISTRATION_URL,
+    'https://ing-fatmata-kargbo-ing-alhaji-s-koi.vercel.app/register',
   )
-  assert.equal(new URL(STAFF_CHECK_IN_URL).pathname, '/check-in')
-  assert.equal(new URL(STAFF_CHECK_IN_URL).protocol, 'https:')
-  assert.equal(new URL(STAFF_CHECK_IN_URL).hostname, 'ing-fatmata-kargbo-ing-alhaji-s-koi.vercel.app')
+  assert.equal(new URL(REGISTRATION_URL).pathname, '/register')
+  assert.equal(new URL(REGISTRATION_URL).protocol, 'https:')
+  assert.equal(new URL(REGISTRATION_URL).hostname, 'ing-fatmata-kargbo-ing-alhaji-s-koi.vercel.app')
 })
 
 test('permanent shared QR files are generated in the public downloads directory', () => {

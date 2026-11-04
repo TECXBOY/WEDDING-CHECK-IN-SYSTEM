@@ -217,6 +217,7 @@ export default function CheckIn() {
           </p>
           <div className="flex shrink-0 gap-2">
             {isAdmin && <Link to="/admin" className="btn-ghost">Admin</Link>}
+            <Link to="/scan" className="btn-ghost">QR scanner</Link>
             <button type="button" onClick={signOut} className="btn-ghost">Sign out</button>
           </div>
         </div>

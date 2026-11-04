@@ -8,10 +8,12 @@ import ImportExportPanel from '../components/admin/ImportExportPanel'
 import ReportsPanel from '../components/admin/ReportsPanel'
 import StaffPanel from '../components/admin/StaffPanel'
 import InvitationQrPanel from '../components/admin/InvitationQrPanel'
+import RegistrationsPanel from '../components/admin/RegistrationsPanel'
 
 const PANELS = [
   ['overview', 'Overview'],
   ['guests', 'Guests'],
+  ['registrations', 'Registrations'],
   ['import-export', 'Import / Export'],
   ['staff', 'Staff'],
   ['reports', 'Reports'],
@@ -24,6 +26,7 @@ export default function Admin() {
   const content = {
     overview: <DashboardPanel />,
     guests: <GuestsPanel />,
+    registrations: <RegistrationsPanel />,
     'import-export': <ImportExportPanel />,
     staff: <StaffPanel />,
     reports: <ReportsPanel />,
@@ -36,7 +39,7 @@ export default function Admin() {
         <Brand subtitle="Administrator dashboard" />
         <div className="mt-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/10 bg-deepnavy px-4 py-3">
           <p className="text-sm text-white/70">Signed in as <span className="text-gold">{profile.full_name}</span></p>
-          <div className="flex gap-2"><Link to="/check-in" className="btn-ghost">Check-in</Link><button type="button" className="btn-ghost" onClick={signOut}>Sign out</button></div>
+          <div className="flex gap-2"><Link to="/scan" className="btn-ghost">QR scanner</Link><Link to="/check-in" className="btn-ghost">Check-in</Link><button type="button" className="btn-ghost" onClick={signOut}>Sign out</button></div>
         </div>
       </header>
 
