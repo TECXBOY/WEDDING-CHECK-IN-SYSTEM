@@ -37,6 +37,7 @@ export default function Register() {
   const [match, setMatch] = useState(null)
   const [names, setNames] = useState([''])
   const [passes, setPasses] = useState([])
+  const [duplicateRegistration, setDuplicateRegistration] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
@@ -51,6 +52,7 @@ export default function Register() {
     setMatch(null)
     setNames([''])
     setPasses([])
+    setDuplicateRegistration(false)
     setLoading(true)
     try {
       const { data, error: rpcError } = await supabase.rpc('lookup_household_registration', {
@@ -61,7 +63,12 @@ export default function Register() {
 
       if (data?.status === 'matched') {
         setMatch(data.guest)
-        setMessage('We found your household. Add the attendees below and confirm your registration.')
+        if (data.guest.is_registered) {
+          setDuplicateRegistration(true)
+          setMessage('This phone number has already been used for registration. No new passes were created. If you need your existing passes again, use the replacement option below or contact the wedding registration team.')
+        } else {
+          setMessage('We found your household. Add the attendees below and confirm your registration.')
+        }
       } else {
         const { error: requestError } = await supabase.rpc('submit_registration_request', {
           p_full_name: fullName,
@@ -101,11 +108,16 @@ export default function Register() {
         p_names: validation.attendees,
       })
       if (rpcError) throw rpcError
+      if (!data?.length) throw new Error('No new admission passes were issued.')
       setPasses(data || [])
-      setMessage('Registration confirmed. Save each admission pass; registration alone does not grant entry.')
+      setDuplicateRegistration(false)
+      setMessage('Registration successful. Save each person’s unique admission pass; registration alone does not grant entry.')
       setMatch(null)
     } catch (requestError) {
-      setError(requestError.message?.includes('capacity')
+      setDuplicateRegistration(requestError.code === '23505' || requestError.message?.includes('already registered'))
+      setError(requestError.message?.includes('already registered')
+        ? 'This phone number has already been used for registration. No new passes were created. Use the replacement option below or contact the wedding registration team.'
+        : requestError.message?.includes('capacity')
         ? 'The number of attendees exceeds the remaining household capacity. Please review the names.'
         : requestError.message?.includes('No approved household')
         ? 'We could not confirm your household from the details you provided.'
@@ -126,8 +138,9 @@ export default function Register() {
       })
       if (rpcError) throw rpcError
       setPasses(data || [])
+      setDuplicateRegistration(!data?.length)
       setMessage(data?.length
-        ? 'Replacement passes are ready. Previously issued passes have been revoked.'
+        ? 'Replacement passes are ready. Previous active passes were revoked; save these new passes.'
         : 'There are no active household passes to retrieve for this matched household.')
     } catch {
       setError('Passes could not be retrieved for this household. Please confirm your name and phone and try again.')
@@ -163,8 +176,16 @@ export default function Register() {
       {match && !passes.length && (
         <section className="mx-auto mt-6 max-w-xl rounded-xl border border-white/10 bg-deepnavy p-5">
         <h2 className="font-serif text-xl text-beige">{match.household_name || match.full_name}</h2>
-        <p className="mt-2 text-sm text-white/65">Remaining household capacity: {maxAttendees}</p>
-        {maxAttendees < 1 ? <p className="mt-3 text-sm text-yellow-100">This household has no remaining registration capacity. Please contact the administrator.</p> : (
+        {!duplicateRegistration && <p className="mt-2 text-sm text-white/65">Remaining household capacity: {maxAttendees}</p>}
+        {duplicateRegistration ? (
+          <div className="mt-4 rounded-lg border border-yellow-300/30 bg-yellow-300/10 p-4">
+            <p className="text-sm text-yellow-100">This household is already registered. Do not submit a second registration.</p>
+            <button type="button" className="btn-primary mt-3" onClick={retrievePasses} disabled={loading}>
+              {loading ? 'Preparing…' : 'Replace lost admission passes'}
+            </button>
+            <p className="mt-2 text-xs text-white/50">Replacing passes revokes existing active QR codes and issues new ones.</p>
+          </div>
+        ) : maxAttendees < 1 ? <p className="mt-3 text-sm text-yellow-100">This household has no remaining registration capacity. Please contact the administrator.</p> : (
           <form onSubmit={submitRegistration} className="mt-5 space-y-3">
             {names.map((name, index) => (
               <div key={index}>
@@ -185,11 +206,12 @@ export default function Register() {
         </section>
       )}
 
-      {match && !passes.length && (
+      {match && !duplicateRegistration && !passes.length && (
         <div className="mx-auto mt-5 max-w-xl">
         <button type="button" className="btn-primary" onClick={retrievePasses} disabled={loading}>
-          {loading ? 'Preparing…' : 'Retrieve / replace household passes'}
+          {loading ? 'Preparing…' : 'Replace lost household passes'}
         </button>
+        <p className="mt-2 text-center text-xs text-white/45">Replacement revokes any previously issued active passes.</p>
         </div>
       )}
 

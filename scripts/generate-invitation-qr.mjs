@@ -39,7 +39,7 @@ pdf.setFontSize(16)
 pdf.text('Household Guest Registration', pageWidth / 2, 45, { align: 'center' })
 pdf.addImage(`data:image/png;base64,${png.toString('base64')}`, 'PNG', 45, 59, 120, 120)
 pdf.setFontSize(11)
-pdf.text('Scan to register your household using the unique reference code on your invitation.', pageWidth / 2, 195, {
+pdf.text('Scan, then register your approved household using the household contact name and phone number.', pageWidth / 2, 195, {
   align: 'center',
   maxWidth: pageWidth - 36,
 })

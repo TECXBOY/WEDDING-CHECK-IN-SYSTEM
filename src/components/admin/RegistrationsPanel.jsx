@@ -31,7 +31,6 @@ export default function RegistrationsPanel() {
   const [attendees, setAttendees] = useState([])
   const [history, setHistory] = useState([])
   const [selected, setSelected] = useState(null)
-  const [reference, setReference] = useState(null)
   const [replacement, setReplacement] = useState(null)
   const [editing, setEditing] = useState({})
   const [loading, setLoading] = useState(true)
@@ -39,7 +38,6 @@ export default function RegistrationsPanel() {
   const [error, setError] = useState('')
   const [requestsError, setRequestsError] = useState('')
   const [notice, setNotice] = useState('')
-  const [copyError, setCopyError] = useState('')
 
   const loadHouseholds = useCallback(async () => {
     setLoading(true)
@@ -120,7 +118,6 @@ export default function RegistrationsPanel() {
 
   async function openHousehold(row) {
     setSelected(row)
-    setReference(null)
     setReplacement(null)
     setNotice('')
     setError('')
@@ -136,21 +133,6 @@ export default function RegistrationsPanel() {
       setEditing({})
     } catch {
       setError('Household registration details and history could not be loaded.')
-    }
-  }
-
-  async function issueReference(guestId) {
-    setError('')
-    setNotice('')
-    setReference(null)
-    try {
-      const { data, error: responseError } = await supabase.rpc('admin_issue_invitation_code', { p_guest_id: guestId })
-      if (responseError) throw responseError
-      setReference(data)
-      setNotice('New unique household reference created. It is shown only once here; share it with this invitation household.')
-      await loadHouseholds()
-    } catch {
-      setError('Could not create or rotate the invitation reference.')
     }
   }
 
@@ -287,31 +269,13 @@ export default function RegistrationsPanel() {
           </ul>
         ) : <p className="mt-3 text-sm text-white/50">No registration requests have been submitted.</p>}
       </section>
-      {reference && (
-        <div className="mt-3 rounded-lg border border-gold/30 bg-midnight p-4 text-center">
-          <p className="break-all font-mono text-lg tracking-wider text-gold">New household reference: {reference}</p>
-          <button type="button" className="btn-ghost mt-3" onClick={async () => {
-            try {
-              await navigator.clipboard.writeText(reference)
-              setCopyError('')
-              setNotice('Invitation reference copied.')
-            } catch {
-              setCopyError('Could not copy automatically. Select and copy the reference above.')
-            }
-          }}>Copy reference</button>
-          {copyError && <p role="alert" className="mt-2 text-sm text-yellow-100">{copyError}</p>}
-        </div>
-      )}
       <div className="mt-5 grid gap-3 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
         <ul className="max-h-[70vh] space-y-2 overflow-auto">
           {households.map((row) => (
             <li key={row.guest_id} className={`rounded-xl border p-3 ${selected?.guest_id === row.guest_id ? 'border-gold/50 bg-gold/5' : 'border-white/10 bg-deepnavy'}`}>
               <button className="w-full text-left" onClick={() => openHousehold(row)}>
                 <span className="block font-medium text-beige">{row.household_name || row.invitation_name}</span>
-                <span className="mt-1 block text-xs text-white/50">{row.attendee_count}/{row.invited_count} registered · {row.checked_in_count} checked in · {row.has_reference ? 'reference issued' : 'no reference'}</span>
-              </button>
-              <button className="btn-ghost mt-2 text-xs" onClick={() => issueReference(row.guest_id)}>
-                {row.has_reference ? 'Rotate reference' : 'Issue reference'}
+                <span className="mt-1 block text-xs text-white/50">{row.attendee_count}/{row.invited_count} registered · {row.checked_in_count} checked in</span>
               </button>
             </li>
           ))}

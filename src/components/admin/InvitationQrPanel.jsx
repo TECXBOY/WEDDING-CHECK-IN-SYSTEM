@@ -26,7 +26,7 @@ export default function InvitationQrPanel() {
     <section aria-labelledby="invitation-qr-heading" className="mx-auto max-w-2xl">
       <h2 id="invitation-qr-heading" className="font-serif text-2xl text-beige">Invitation QR Code</h2>
       <p className="mt-1 text-sm text-white/55">
-        One shared code for every printed invitation. The unique household reference printed alongside it identifies the approved invitation.
+        One shared registration code for every printed invitation. Guests verify their approved household using its name and contact phone number; no invitation code is needed.
       </p>
 
       <div className="mt-5 grid gap-5 rounded-2xl border border-white/10 bg-deepnavy p-5 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)] sm:items-center sm:p-6">
@@ -49,7 +49,7 @@ export default function InvitationQrPanel() {
           </button>
           {copyError && <p className="mt-2 text-sm text-amber-200" role="alert">{copyError}</p>}
           <p className="mt-4 text-sm leading-6 text-white/65">
-            Test scan: use a phone camera and confirm it opens <code>/register</code>. Registration requires the unique invitation reference; check-in passes still require an authorized staff account.
+            Test scan: use a phone camera and confirm it opens <code>/register</code>. Guests register against their approved household; staff check-in remains behind staff authentication.
           </p>
         </div>
       </div>
