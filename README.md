@@ -7,7 +7,7 @@ Private, mobile-first wedding check-in app. React + Vite, Tailwind, Supabase, Ve
 ## Project structure
 
 ```
-supabase/migrations/   0001 schema · 0002 RLS · 0003 check-in + stats · 0004 Stage 2 · 0005 Stage 3 administration · 0006 household registration and passes
+supabase/migrations/   0001 schema · 0002 RLS · 0003 check-in + stats · 0004 Stage 2 · 0005 Stage 3 administration · 0006 household registration and passes · 0007 reference-free matching · 0008 registration request queue
 supabase/functions/   invite-staff Edge Function (service-role key stays server-side)
 src/lib/supabase.js    Supabase client (anon key only)
 src/auth/              AuthContext (session + staff profile), ProtectedRoute
@@ -20,7 +20,7 @@ public/downloads/      Shared household registration QR (PNG, SVG, print-ready P
 
 1. **Create a Supabase project** at supabase.com.
 2. **Disable public sign-ups:** Authentication → Sign In / Providers → turn **off** "Allow new users to sign up". (Also leave email confirmation as you prefer; staff are created by the admin.)
-3. **Run migrations:** SQL Editor → run `0001_schema.sql`, `0002_rls.sql`, `0003_checkin_functions.sql`, `0004_stage_2_search_and_checkin.sql`, `0005_stage_3_admin.sql`, and `0006_household_registration_and_passes.sql` in order. If 0001–0005 have already been applied, run only `0006_household_registration_and_passes.sql`. The new migration preserves `guests` and historical `check_in_logs`; it adds separate registration, attendee, pass and history tables.
+3. **Run migrations:** SQL Editor → run migrations `0001` through `0008` in order. If `0001`–`0007` have already been applied, run only `0008_registration_request_queue.sql`. These migrations preserve `guests` and historical `check_in_logs`; they add registration, attendee, pass, history, and unmatched-registration request records.
 4. **Create the first administrator:**
    - Authentication → Users → *Add user* (email + password, tick auto-confirm).
    - Copy the new user's UUID, then in the SQL Editor run:
@@ -36,7 +36,7 @@ public/downloads/      Shared household registration QR (PNG, SVG, print-ready P
 
 The shared household QR uses the fixed production URL `https://ing-fatmata-kargbo-ing-alhaji-s-koi.vercel.app/register`, independent of the current browser or deployment preview. Admins can view/copy/download it under Admin → Invitation QR. Regenerate the static PNG/SVG/PDF files after changing the approved permanent URL with `npm run generate:invitation-qr`. Keep the Vercel production alias assigned to the project to preserve printed invitations. The QR is a shared entry point; guest household matching is done server-side using the registrant's full name and phone number, not a per-household invitation code printed on the card.
 
-Households register at `/register` with full name + phone number. The server matches the registrant against the approved guest list and then issues individual admission passes only after a confirmed match. Authorized staff sign in and open `/scan` to scan individual passes or search registered attendees for manual admission. Camera use requires a secure HTTPS origin and device permission. The old `/check-in` invitation-level workflow remains available for compatibility. Registration, pass issuance, scanning and attendee management require migration `0007` (and the earlier additive migrations) to be applied in Supabase. The browser uses only the public anon key; privileged operations validate staff/admin roles in database RPCs.
+Households register at `/register` with full name + phone number. The server matches the registrant against the approved guest list and issues individual admission passes only after a confirmed match. If no approved household matches, the name and phone are saved as a pending request visible to administrators under Admin → Registrations; administrators verify the details and update the approved guest record as appropriate. Repeated requests for the same normalized name and phone update the same pending item. Authorized staff sign in and open `/scan` to scan individual passes or search registered attendees for manual admission. Camera use requires a secure HTTPS origin and device permission. The old `/check-in` invitation-level workflow remains available for compatibility. Registration, pass issuance, scanning, attendee management, and request review require migrations `0006`–`0008` (and earlier migrations) to be applied in Supabase. The browser uses only the public anon key; privileged operations validate staff/admin roles in database RPCs.
 
 The admin dashboard includes paginated guest management, bounded CSV import/export, staff listing/invitation/role control, and attendance/history reports. Import is capped at 500 rows per transaction; exports are capped at 5,000 rows. Staff invitation requires the deployed `invite-staff` Edge Function. The function validates the current active admin from their authenticated session before using its server-only service role.
 

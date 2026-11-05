@@ -25,6 +25,7 @@ function PassDownload({ token, label }) {
 
 export default function RegistrationsPanel() {
   const [households, setHouseholds] = useState([])
+  const [requests, setRequests] = useState([])
   const [attendees, setAttendees] = useState([])
   const [history, setHistory] = useState([])
   const [selected, setSelected] = useState(null)
@@ -32,7 +33,9 @@ export default function RegistrationsPanel() {
   const [replacement, setReplacement] = useState(null)
   const [editing, setEditing] = useState({})
   const [loading, setLoading] = useState(true)
+  const [requestsLoading, setRequestsLoading] = useState(true)
   const [error, setError] = useState('')
+  const [requestsError, setRequestsError] = useState('')
   const [notice, setNotice] = useState('')
   const [copyError, setCopyError] = useState('')
 
@@ -50,7 +53,38 @@ export default function RegistrationsPanel() {
     }
   }, [])
 
-  useEffect(() => { loadHouseholds() }, [loadHouseholds])
+  const loadRequests = useCallback(async () => {
+    setRequestsLoading(true)
+    setRequestsError('')
+    try {
+      const { data, error: responseError } = await supabase.rpc('admin_list_registration_requests')
+      if (responseError) throw responseError
+      setRequests(data || [])
+    } catch {
+      setRequestsError('Registration requests could not be loaded. Confirm migration 0008 is applied.')
+    } finally {
+      setRequestsLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    loadHouseholds()
+    loadRequests()
+  }, [loadHouseholds, loadRequests])
+
+  async function markRequestReviewed(requestId) {
+    setError('')
+    try {
+      const { error: responseError } = await supabase.rpc('admin_resolve_registration_request', {
+        p_request_id: requestId,
+      })
+      if (responseError) throw responseError
+      setNotice('Request marked as reviewed.')
+      await loadRequests()
+    } catch {
+      setError('Could not update this registration request.')
+    }
+  }
 
   async function openHousehold(row) {
     setSelected(row)
@@ -150,12 +184,48 @@ export default function RegistrationsPanel() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 id="registration-management-heading" className="font-serif text-2xl text-beige">Household registrations</h2>
-          <p className="mt-1 text-sm text-white/55">Issue one-time invitation references, view household attendees, correct names, and manage admission passes.</p>
+          <p className="mt-1 text-sm text-white/55">Review unmatched registration requests, view household attendees, correct names, and manage admission passes.</p>
         </div>
-        <button className="btn-ghost" onClick={loadHouseholds} disabled={loading}>{loading ? 'Loading…' : 'Refresh'}</button>
+        <button type="button" className="btn-ghost" onClick={() => { loadHouseholds(); loadRequests() }} disabled={loading || requestsLoading}>
+          {loading || requestsLoading ? 'Loading…' : 'Refresh'}
+        </button>
       </div>
       {error && <p role="alert" className="mt-4 rounded-lg border border-danger/40 bg-danger/10 p-3 text-sm">{error}</p>}
       {notice && <p role="status" className="mt-4 rounded-lg border border-gold/30 bg-gold/10 p-3 text-sm text-beige">{notice}</p>}
+      <section aria-labelledby="registration-requests-heading" className="mt-5 rounded-xl border border-gold/25 bg-deepnavy p-4">
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <h3 id="registration-requests-heading" className="font-serif text-xl text-beige">Registration requests</h3>
+          <span className="text-xs text-white/50">{requests.filter((request) => request.status === 'pending').length} pending</span>
+        </div>
+        <p className="mt-1 text-sm text-white/55">These are people whose name and phone did not match an approved invitation. Verify them and, if appropriate, update the guest record before they retry registration.</p>
+        {requestsError && <p role="alert" className="mt-3 rounded-lg border border-danger/40 bg-danger/10 p-3 text-sm">{requestsError}</p>}
+        {requestsLoading ? <p className="mt-3 text-sm text-white/50">Loading requests…</p> : requests.length ? (
+          <ul className="mt-3 grid gap-2 sm:grid-cols-2">
+            {requests.map((request) => (
+              <li key={request.request_id} className="rounded-lg border border-white/10 bg-midnight p-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="font-medium text-beige">{request.full_name}</p>
+                    <a className="mt-1 block break-all text-sm text-gold underline" href={`tel:${request.phone_number}`}>{request.phone_number}</a>
+                    <p className="mt-2 text-xs text-white/45">
+                      Last requested {new Date(request.last_submitted_at).toLocaleString()}
+                      {request.submission_count > 1 ? ` · ${request.submission_count} attempts` : ''}
+                    </p>
+                  </div>
+                  <span className={`shrink-0 rounded px-2 py-1 text-xs ${request.status === 'pending' ? 'bg-yellow-300/15 text-yellow-100' : 'bg-white/10 text-white/50'}`}>
+                    {request.status === 'pending' ? 'Pending' : 'Reviewed'}
+                  </span>
+                </div>
+                {request.status === 'pending' && (
+                  <button type="button" className="btn-ghost mt-3 text-xs" onClick={() => markRequestReviewed(request.request_id)}>
+                    Mark reviewed
+                  </button>
+                )}
+              </li>
+            ))}
+          </ul>
+        ) : <p className="mt-3 text-sm text-white/50">No registration requests have been submitted.</p>}
+      </section>
       {reference && (
         <div className="mt-3 rounded-lg border border-gold/30 bg-midnight p-4 text-center">
           <p className="break-all font-mono text-lg tracking-wider text-gold">New household reference: {reference}</p>

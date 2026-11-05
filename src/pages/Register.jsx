@@ -35,7 +35,6 @@ export default function Register() {
   const [fullName, setFullName] = useState('')
   const [phone, setPhone] = useState('')
   const [match, setMatch] = useState(null)
-  const [candidateList, setCandidateList] = useState([])
   const [names, setNames] = useState([''])
   const [passes, setPasses] = useState([])
   const [loading, setLoading] = useState(false)
@@ -50,7 +49,6 @@ export default function Register() {
     setError('')
     setMessage('')
     setMatch(null)
-    setCandidateList([])
     setNames([''])
     setPasses([])
     setLoading(true)
@@ -64,11 +62,13 @@ export default function Register() {
       if (data?.status === 'matched') {
         setMatch(data.guest)
         setMessage('We found your household. Add the attendees below and confirm your registration.')
-      } else if (data?.status === 'ambiguous') {
-        setCandidateList(data.candidates || [])
-        setError('More than one household matches this name and phone. Please ask the administrator to verify your invitation.')
       } else {
-        setError('Thanks — we will confirm your registration and contact you if your household is approved.')
+        const { error: requestError } = await supabase.rpc('submit_registration_request', {
+          p_full_name: fullName,
+          p_phone: normalizedPhone,
+        })
+        if (requestError) throw requestError
+        setMessage('Your request was sent to the event administrators for review. They may contact you using the phone number provided. No admission passes are issued until your household is verified.')
       }
     } catch (requestError) {
       setError(requestError.message?.includes('fetch')
@@ -159,20 +159,6 @@ export default function Register() {
 
       {error && <p role="alert" className="mx-auto mt-4 max-w-xl rounded-lg border border-danger/50 bg-danger/10 p-3 text-sm">{error}</p>}
       {message && <p role="status" className="mx-auto mt-4 max-w-xl rounded-lg border border-gold/30 bg-gold/10 p-3 text-sm text-beige">{message}</p>}
-
-      {candidateList.length > 0 && !match && (
-        <section className="mx-auto mt-6 max-w-xl rounded-xl border border-white/10 bg-deepnavy p-5">
-        <h2 className="font-serif text-xl text-beige">Possible household matches</h2>
-        <ul className="mt-3 space-y-2 text-sm text-white/70">
-          {candidateList.map((candidate) => (
-            <li key={candidate.guest_id} className="rounded-lg border border-white/10 p-3">
-              <p className="font-medium text-beige">{candidate.household_name || candidate.full_name}</p>
-              <p>Guests invited: {candidate.invited_count} · checked in: {candidate.checked_in_count}</p>
-            </li>
-          ))}
-        </ul>
-        </section>
-      )}
 
       {match && !passes.length && (
         <section className="mx-auto mt-6 max-w-xl rounded-xl border border-white/10 bg-deepnavy p-5">

@@ -1,18 +1,42 @@
 import { useCallback, useEffect, useState } from 'react'
 import { attendanceStatus, ADMIN_PAGE_SIZE } from '../../lib/adminData'
+import { normalizeRegistrationPhone } from '../../lib/registration'
 import { supabase } from '../../lib/supabase'
 
-const EMPTY_FORM = { full_name: '', household_name: '', invited_count: '1', notes: '' }
+const EMPTY_FORM = { full_name: '', household_name: '', phone_number: '', invited_count: '1', notes: '' }
 
 function GuestForm({ guest, onClose, onSaved }) {
   const [form, setForm] = useState(guest ? {
     full_name: guest.full_name,
     household_name: guest.household_name || '',
+    phone_number: '',
     invited_count: String(guest.invited_count),
     notes: guest.notes || '',
   } : EMPTY_FORM)
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
+  const [loadingPhone, setLoadingPhone] = useState(Boolean(guest))
+  const [phoneLoadFailed, setPhoneLoadFailed] = useState(false)
+
+  useEffect(() => {
+    if (!guest) return undefined
+    let active = true
+    supabase.rpc('admin_get_guest_registration_phone', { p_guest_id: guest.id })
+      .then(({ data, error: responseError }) => {
+        if (!active) return
+        if (responseError) throw responseError
+        setForm((current) => ({ ...current, phone_number: data || '' }))
+        setError('')
+        setLoadingPhone(false)
+      })
+      .catch(() => {
+        if (!active) return
+        setError('Guest phone number could not be loaded. Confirm migration 0008 is applied.')
+        setPhoneLoadFailed(true)
+        setLoadingPhone(false)
+      })
+    return () => { active = false }
+  }, [guest?.id])
 
   async function submit(event) {
     event.preventDefault()
@@ -29,6 +53,11 @@ function GuestForm({ guest, onClose, onSaved }) {
       setError('Household names are limited to 200 characters and notes to 1000.')
       return
     }
+    const phoneNumber = normalizeRegistrationPhone(form.phone_number)
+    if (form.phone_number.trim() && !phoneNumber) {
+      setError('Enter a valid phone number or leave the field blank.')
+      return
+    }
     if (guest && invited < guest.checked_in_count) {
       setError(`Invited count cannot be less than the ${guest.checked_in_count} people already checked in.`)
       return
@@ -39,6 +68,8 @@ function GuestForm({ guest, onClose, onSaved }) {
     const values = {
       full_name: form.full_name.trim(),
       household_name: form.household_name.trim() || null,
+      phone_number: phoneNumber || null,
+      normalized_phone: phoneNumber || null,
       invited_count: invited,
       notes: form.notes.trim() || null,
     }
@@ -63,6 +94,18 @@ function GuestForm({ guest, onClose, onSaved }) {
             : 'Guest could not be saved. Check the values and try again.')
         return
       }
+      if (!guest && phoneNumber) {
+        const { data, error: phoneError } = await supabase
+          .from('guests')
+          .update({ phone_number: phoneNumber, normalized_phone: phoneNumber })
+          .eq('id', response.data)
+          .select('id')
+          .maybeSingle()
+        if (phoneError || !data) {
+          setError('Guest was created, but the phone number could not be saved. Edit the guest and retry.')
+          return
+        }
+      }
       await onSaved()
     } catch {
       setError('Guest could not be saved because the request failed. Check your connection and retry.')
@@ -82,6 +125,9 @@ function GuestForm({ guest, onClose, onSaved }) {
           <label className="block text-sm text-white/70">Household or group name
             <input className="field mt-1" maxLength="200" value={form.household_name} onChange={(e) => setForm({ ...form, household_name: e.target.value })} />
           </label>
+          <label className="block text-sm text-white/70">Registration phone number
+            <input className="field mt-1" type="tel" inputMode="tel" placeholder="e.g. 0761234567 or +232761234567" value={form.phone_number} onChange={(e) => setForm({ ...form, phone_number: e.target.value })} />
+          </label>
           <label className="block text-sm text-white/70">People invited
             <input className="field mt-1" type="number" min="1" step="1" value={form.invited_count} onChange={(e) => setForm({ ...form, invited_count: e.target.value })} required />
           </label>
@@ -91,7 +137,7 @@ function GuestForm({ guest, onClose, onSaved }) {
           {error && <p className="text-sm text-red-200" role="alert">{error}</p>}
           <div className="grid grid-cols-2 gap-3 pt-2">
             <button type="button" className="btn-ghost" onClick={onClose} disabled={saving}>Cancel</button>
-            <button type="submit" className="btn-primary" disabled={saving}>{saving ? 'Saving…' : 'Save guest'}</button>
+            <button type="submit" className="btn-primary" disabled={saving || loadingPhone || phoneLoadFailed}>{saving || loadingPhone ? 'Loading…' : 'Save guest'}</button>
           </div>
         </form>
       </section>
