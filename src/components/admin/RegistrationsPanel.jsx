@@ -26,6 +26,8 @@ function PassDownload({ token, label }) {
 export default function RegistrationsPanel() {
   const [households, setHouseholds] = useState([])
   const [requests, setRequests] = useState([])
+  const [approvingRequest, setApprovingRequest] = useState(null)
+  const [approval, setApproval] = useState({ full_name: '', household_name: '', invited_count: '' })
   const [attendees, setAttendees] = useState([])
   const [history, setHistory] = useState([])
   const [selected, setSelected] = useState(null)
@@ -72,17 +74,47 @@ export default function RegistrationsPanel() {
     loadRequests()
   }, [loadHouseholds, loadRequests])
 
-  async function markRequestReviewed(requestId) {
+  function startApproval(request) {
+    setApprovingRequest(request.request_id)
+    setApproval({ full_name: request.full_name, household_name: '', invited_count: '' })
+    setError('')
+  }
+
+  async function approveRequest(event, request) {
+    event.preventDefault()
+    setError('')
+    try {
+      const invitedCount = Number(approval.invited_count)
+      if (!Number.isSafeInteger(invitedCount) || invitedCount < 1 || invitedCount > 2147483647) {
+        setError('Enter the approved number of people for this invitation.')
+        return
+      }
+      const { error: responseError } = await supabase.rpc('admin_approve_registration_request', {
+        p_request_id: request.request_id,
+        p_full_name: approval.full_name.trim(),
+        p_household_name: approval.household_name.trim() || null,
+        p_invited_count: invitedCount,
+      })
+      if (responseError) throw responseError
+      setApprovingRequest(null)
+      setNotice(`${approval.full_name.trim()} was approved and added to the guest list with capacity for ${invitedCount}. They can now retry household registration.`)
+      await Promise.all([loadRequests(), loadHouseholds()])
+    } catch {
+      setError('Could not approve this request. Check whether an invitation with the same name and household already exists.')
+    }
+  }
+
+  async function dismissRequest(requestId) {
     setError('')
     try {
       const { error: responseError } = await supabase.rpc('admin_resolve_registration_request', {
         p_request_id: requestId,
       })
       if (responseError) throw responseError
-      setNotice('Request marked as reviewed.')
+      setNotice('Request dismissed; no invitation was created.')
       await loadRequests()
     } catch {
-      setError('Could not update this registration request.')
+      setError('Could not dismiss this registration request.')
     }
   }
 
@@ -212,14 +244,43 @@ export default function RegistrationsPanel() {
                       {request.submission_count > 1 ? ` · ${request.submission_count} attempts` : ''}
                     </p>
                   </div>
-                  <span className={`shrink-0 rounded px-2 py-1 text-xs ${request.status === 'pending' ? 'bg-yellow-300/15 text-yellow-100' : 'bg-white/10 text-white/50'}`}>
-                    {request.status === 'pending' ? 'Pending' : 'Reviewed'}
+                  <span className={`shrink-0 rounded px-2 py-1 text-xs ${request.status === 'pending' ? 'bg-yellow-300/15 text-yellow-100' : request.status === 'approved' ? 'bg-emerald-300/15 text-emerald-100' : 'bg-white/10 text-white/50'}`}>
+                    {request.status === 'pending' ? 'Pending' : request.status === 'approved' ? 'Approved' : 'Dismissed'}
                   </span>
                 </div>
                 {request.status === 'pending' && (
-                  <button type="button" className="btn-ghost mt-3 text-xs" onClick={() => markRequestReviewed(request.request_id)}>
-                    Mark reviewed
-                  </button>
+                  <>
+                    {approvingRequest === request.request_id ? (
+                      <form className="mt-3 space-y-2 border-t border-white/10 pt-3" onSubmit={(event) => approveRequest(event, request)}>
+                        <label className="block text-xs text-white/65" htmlFor={`approve-name-${request.request_id}`}>Approved guest name
+                          <input id={`approve-name-${request.request_id}`} className="field mt-1 py-2" maxLength="200" required value={approval.full_name}
+                            onChange={(event) => setApproval((current) => ({ ...current, full_name: event.target.value }))} />
+                        </label>
+                        <label className="block text-xs text-white/65" htmlFor={`approve-household-${request.request_id}`}>Household name (optional)
+                          <input id={`approve-household-${request.request_id}`} className="field mt-1 py-2" maxLength="200" value={approval.household_name}
+                            onChange={(event) => setApproval((current) => ({ ...current, household_name: event.target.value }))} />
+                        </label>
+                        <label className="block text-xs text-white/65" htmlFor={`approve-capacity-${request.request_id}`}>Approved guest capacity
+                          <input id={`approve-capacity-${request.request_id}`} className="field mt-1 py-2" type="number" min="1" step="1" required value={approval.invited_count}
+                            onChange={(event) => setApproval((current) => ({ ...current, invited_count: event.target.value }))} />
+                        </label>
+                        <p className="text-xs text-white/45">Approving creates an active guest invitation and saves this phone number for household matching.</p>
+                        <div className="flex flex-wrap gap-2">
+                          <button type="submit" className="btn-primary text-xs">Confirm approval</button>
+                          <button type="button" className="btn-ghost text-xs" onClick={() => setApprovingRequest(null)}>Cancel</button>
+                        </div>
+                      </form>
+                    ) : (
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <button type="button" className="btn-primary text-xs" onClick={() => startApproval(request)}>
+                          Approve &amp; add invitation
+                        </button>
+                        <button type="button" className="btn-ghost text-xs" onClick={() => dismissRequest(request.request_id)}>
+                          Dismiss
+                        </button>
+                      </div>
+                    )}
+                  </>
                 )}
               </li>
             ))}
