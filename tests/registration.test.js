@@ -1,6 +1,11 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { extractPassToken, validateAttendeeNames } from '../src/lib/registration.js'
+import {
+  extractPassToken,
+  normalizeRegistrationName,
+  normalizeRegistrationPhone,
+  validateAttendeeNames,
+} from '../src/lib/registration.js'
 
 const TOKEN = 'a'.repeat(64)
 
@@ -20,4 +25,11 @@ test('registration validates capacity and duplicate attendee names', () => {
   assert.match(validateAttendeeNames(['Amina', 'amina'], 2).error, /unique/)
   assert.match(validateAttendeeNames(['Amina', 'John'], 1).error, /between 1 and 1/)
   assert.match(validateAttendeeNames(['', '  '], 3).error, /between 1 and 3/)
+})
+
+test('registration name and phone normalization handles common formats', () => {
+  assert.equal(normalizeRegistrationName('Mr. Amina Kargbo   Jr.'), 'amina kargbo jr')
+  assert.equal(normalizeRegistrationPhone('076 123 4567'), '+232761234567')
+  assert.equal(normalizeRegistrationPhone('+23276 123 4567'), '+232761234567')
+  assert.equal(normalizeRegistrationPhone('761234567'), '+232761234567')
 })

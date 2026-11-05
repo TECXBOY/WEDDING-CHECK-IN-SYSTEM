@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import QRCode from 'qrcode'
 import Brand from '../components/Brand'
 import { PRODUCTION_APP_ORIGIN } from '../config/invitation'
-import { validateAttendeeNames } from '../lib/registration'
+import { normalizeRegistrationPhone, validateAttendeeNames } from '../lib/registration'
 import { supabase } from '../lib/supabase'
 
 function PassCard({ pass }) {
@@ -32,36 +32,49 @@ function PassCard({ pass }) {
 }
 
 export default function Register() {
-  const [code, setCode] = useState('')
-  const [invitation, setInvitation] = useState(null)
+  const [fullName, setFullName] = useState('')
+  const [phone, setPhone] = useState('')
+  const [match, setMatch] = useState(null)
+  const [candidateList, setCandidateList] = useState([])
   const [names, setNames] = useState([''])
   const [passes, setPasses] = useState([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
 
-  const maxAttendees = invitation
-    ? Number(invitation.invited_count) - Number(invitation.checked_in_count)
-    : 0
+  const normalizedPhone = normalizeRegistrationPhone(phone)
+  const maxAttendees = match ? Number(match.invited_count) - Number(match.checked_in_count) : 0
 
-  async function validateCode(event) {
+  async function validateMatch(event) {
     event.preventDefault()
     setError('')
     setMessage('')
+    setMatch(null)
+    setCandidateList([])
+    setNames([''])
+    setPasses([])
     setLoading(true)
     try {
-      const { data, error: rpcError } = await supabase.rpc('validate_household_code', { p_code: code.trim() })
+      const { data, error: rpcError } = await supabase.rpc('lookup_household_registration', {
+        p_full_name: fullName,
+        p_phone: normalizedPhone,
+      })
       if (rpcError) throw rpcError
-      setInvitation(data)
-      setNames([''])
-      if (data.is_registered) setMessage('This household is already registered. Retrieve replacement passes below if needed.')
+
+      if (data?.status === 'matched') {
+        setMatch(data.guest)
+        setMessage('We found your household. Add the attendees below and confirm your registration.')
+      } else if (data?.status === 'ambiguous') {
+        setCandidateList(data.candidates || [])
+        setError('More than one household matches this name and phone. Please ask the administrator to verify your invitation.')
+      } else {
+        setError('Thanks — we will confirm your registration and contact you if your household is approved.')
+      }
     } catch (requestError) {
-      setError(requestError.code === 'PGRST202'
-        ? 'Household registration is not enabled yet. Ask the administrator to apply database migration 0006.'
-        : requestError.message?.includes('fetch')
-          ? 'Could not reach the registration service. Check your connection and try again.'
-        : 'That invitation reference is invalid or inactive. Check the code on your printed invitation.')
-      setInvitation(null)
+      setError(requestError.message?.includes('fetch')
+        ? 'Could not reach the registration service. Check your connection and try again.'
+        : 'We could not confirm your household right now. Please try again or ask the administrator for help.')
+      setMatch(null)
     } finally {
       setLoading(false)
     }
@@ -71,6 +84,10 @@ export default function Register() {
     event.preventDefault()
     setError('')
     setMessage('')
+    if (!match) {
+      setError('Please confirm your household first before registering attendees.')
+      return
+    }
     const validation = validateAttendeeNames(names, maxAttendees)
     if (validation.error) {
       setError(validation.error)
@@ -78,21 +95,21 @@ export default function Register() {
     }
     setLoading(true)
     try {
-      const { data, error: rpcError } = await supabase.rpc('register_household', {
-        p_code: code.trim(),
+      const { data, error: rpcError } = await supabase.rpc('register_household_match', {
+        p_full_name: fullName,
+        p_phone: normalizedPhone,
         p_names: validation.attendees,
       })
       if (rpcError) throw rpcError
       setPasses(data || [])
       setMessage('Registration confirmed. Save each admission pass; registration alone does not grant entry.')
+      setMatch(null)
     } catch (requestError) {
-      setError(requestError.code === 'PGRST202'
-        ? 'Household registration is not enabled yet. Ask the administrator to apply database migration 0006.'
-        : requestError.message?.includes('already registered')
-          ? 'This household is already registered. Use the pass retrieval option.'
-          : requestError.message?.includes('capacity')
-            ? 'The number of attendees exceeds the remaining invitation capacity. Please review the names.'
-            : 'Registration could not be completed. Check the names and connection, then try again.')
+      setError(requestError.message?.includes('capacity')
+        ? 'The number of attendees exceeds the remaining household capacity. Please review the names.'
+        : requestError.message?.includes('No approved household')
+        ? 'We could not confirm your household from the details you provided.'
+        : 'Registration could not be completed. Check the details and try again.')
     } finally {
       setLoading(false)
     }
@@ -103,14 +120,17 @@ export default function Register() {
     setError('')
     setMessage('')
     try {
-      const { data, error: rpcError } = await supabase.rpc('household_reissue_passes', { p_code: code.trim() })
+      const { data, error: rpcError } = await supabase.rpc('household_reissue_passes_by_identity', {
+        p_full_name: fullName,
+        p_phone: normalizedPhone,
+      })
       if (rpcError) throw rpcError
       setPasses(data || [])
       setMessage(data?.length
         ? 'Replacement passes are ready. Previously issued passes have been revoked.'
-        : 'There are no unadmitted household passes to retrieve.')
+        : 'There are no active household passes to retrieve for this matched household.')
     } catch {
-      setError('Passes could not be retrieved. Confirm the invitation reference and try again.')
+      setError('Passes could not be retrieved for this household. Please confirm your name and phone and try again.')
     } finally {
       setLoading(false)
     }
@@ -120,26 +140,45 @@ export default function Register() {
     <main className="mx-auto min-h-screen max-w-3xl px-4 py-8 sm:px-6">
       <Brand subtitle="Household guest registration" />
       <p className="mx-auto mt-3 max-w-xl text-center text-sm leading-6 text-white/65">
-        Enter the unique reference printed on your invitation. Only an approved invitation can register attendees, up to its stated capacity.
+        Register your household using your full name and phone number. The system matches that information against the approved guest list before issuing individual admission passes.
       </p>
-      <form onSubmit={validateCode} className="mx-auto mt-6 flex max-w-xl flex-col gap-3 sm:flex-row">
-        <label className="sr-only" htmlFor="invitation-code">Invitation reference</label>
-        <input id="invitation-code" className="field flex-1 uppercase" autoComplete="off" maxLength={24}
-          value={code} onChange={(event) => setCode(event.target.value.toUpperCase())}
-          placeholder="24-character invitation reference" required />
-        <button className="btn-primary sm:w-auto" disabled={loading || code.trim().length !== 24}>
-          {loading ? 'Checking…' : 'Verify invitation'}
+
+      <form onSubmit={validateMatch} className="mx-auto mt-6 max-w-xl space-y-3">
+        <div>
+        <label className="mb-1 block text-sm text-white/70" htmlFor="full-name">Full name</label>
+        <input id="full-name" className="field" value={fullName} onChange={(event) => setFullName(event.target.value)} placeholder="Enter the registrant's full name" required />
+        </div>
+        <div>
+        <label className="mb-1 block text-sm text-white/70" htmlFor="phone-number">Phone number</label>
+        <input id="phone-number" className="field" value={phone} onChange={(event) => setPhone(event.target.value)} placeholder="e.g. 0761234567 or +232761234567" inputMode="tel" required />
+        </div>
+        <button className="btn-primary w-full" disabled={loading || !fullName.trim() || !normalizedPhone}>
+        {loading ? 'Checking…' : 'Verify household'}
         </button>
       </form>
 
       {error && <p role="alert" className="mx-auto mt-4 max-w-xl rounded-lg border border-danger/50 bg-danger/10 p-3 text-sm">{error}</p>}
       {message && <p role="status" className="mx-auto mt-4 max-w-xl rounded-lg border border-gold/30 bg-gold/10 p-3 text-sm text-beige">{message}</p>}
 
-      {invitation && !passes.length && !invitation.is_registered && (
+      {candidateList.length > 0 && !match && (
         <section className="mx-auto mt-6 max-w-xl rounded-xl border border-white/10 bg-deepnavy p-5">
-          <h2 className="font-serif text-xl text-beige">{invitation.household_name || invitation.invitation_name}</h2>
-          <p className="mt-2 text-sm text-white/65">Maximum attendees: {maxAttendees}</p>
-          {maxAttendees < 1 ? <p className="mt-3 text-sm text-yellow-100">This invitation has no remaining registration capacity. Contact the event administrator.</p> : (
+        <h2 className="font-serif text-xl text-beige">Possible household matches</h2>
+        <ul className="mt-3 space-y-2 text-sm text-white/70">
+          {candidateList.map((candidate) => (
+            <li key={candidate.guest_id} className="rounded-lg border border-white/10 p-3">
+              <p className="font-medium text-beige">{candidate.household_name || candidate.full_name}</p>
+              <p>Guests invited: {candidate.invited_count} · checked in: {candidate.checked_in_count}</p>
+            </li>
+          ))}
+        </ul>
+        </section>
+      )}
+
+      {match && !passes.length && (
+        <section className="mx-auto mt-6 max-w-xl rounded-xl border border-white/10 bg-deepnavy p-5">
+        <h2 className="font-serif text-xl text-beige">{match.household_name || match.full_name}</h2>
+        <p className="mt-2 text-sm text-white/65">Remaining household capacity: {maxAttendees}</p>
+        {maxAttendees < 1 ? <p className="mt-3 text-sm text-yellow-100">This household has no remaining registration capacity. Please contact the administrator.</p> : (
           <form onSubmit={submitRegistration} className="mt-5 space-y-3">
             {names.map((name, index) => (
               <div key={index}>
@@ -156,25 +195,26 @@ export default function Register() {
             </div>
             <button type="submit" className="btn-primary" disabled={loading}>{loading ? 'Registering…' : 'Confirm registration'}</button>
           </form>
-          )}
+        )}
         </section>
       )}
 
-      {invitation?.is_registered && !passes.length && (
+      {match && !passes.length && (
         <div className="mx-auto mt-5 max-w-xl">
-          <button type="button" className="btn-primary" onClick={retrievePasses} disabled={loading}>
-            {loading ? 'Preparing…' : 'Retrieve / replace household passes'}
-          </button>
+        <button type="button" className="btn-primary" onClick={retrievePasses} disabled={loading}>
+          {loading ? 'Preparing…' : 'Retrieve / replace household passes'}
+        </button>
         </div>
       )}
 
       {passes.length > 0 && (
         <section className="mt-8">
-          <h2 className="mb-2 text-center font-serif text-2xl text-beige">Your household admission passes</h2>
-          <p className="mb-5 text-center text-sm text-white/60">Save each pass to your phone. The QR contains an access token only, not guest details. Each pass admits one person once.</p>
-          <div className="grid gap-4 sm:grid-cols-2">{passes.map((pass) => <PassCard key={pass.attendee_id} pass={pass} />)}</div>
+        <h2 className="mb-2 text-center font-serif text-2xl text-beige">Your household admission passes</h2>
+        <p className="mb-5 text-center text-sm text-white/60">Save each pass to your phone. The QR contains an access token only, not guest details. Each pass admits one person once.</p>
+        <div className="grid gap-4 sm:grid-cols-2">{passes.map((pass) => <PassCard key={pass.attendee_id} pass={pass} />)}</div>
         </section>
       )}
+
       <p className="mt-8 text-center text-sm text-white/50"><Link className="underline" to="/login">Staff sign-in</Link></p>
     </main>
   )
